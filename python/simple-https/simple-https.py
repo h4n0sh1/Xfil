@@ -2,10 +2,25 @@
 ## Modified with copilot to use temporary certificate files for demonstration purposes
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+import logging
 import ssl
 from pathlib import Path
 import subprocess
 import sys
+
+
+class CustomHandler(SimpleHTTPRequestHandler):
+    def log_message(self, format, *args):
+        logging.info("%s - - [%s] %s", self.client_address[0], self.log_date_time_string(), format % args)
+
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b''
+        logging.info("POST request from %s: Path: %s, Data: %s", self.client_address[0], self.path, post_data.decode(errors='replace'))
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b"POST received")
 
 
 def generate_self_signed_cert(cert_path: Path, key_path: Path) -> None:
@@ -93,6 +108,7 @@ def generate_self_signed_cert(cert_path: Path, key_path: Path) -> None:
 
 
 HERE = Path(__file__).resolve().parent
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 CERT_FILE = HERE / "cert.pem"
 KEY_FILE = HERE / "key.pem"
 
@@ -125,7 +141,7 @@ def get_main_ip():
 
 SERVER_IP = get_main_ip()
 
-with HTTPServer((SERVER_IP, 443), SimpleHTTPRequestHandler) as httpd:
+with HTTPServer((SERVER_IP, 443), CustomHandler) as httpd:
     httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-    print(f"Serving HTTPS on https://{SERVER_IP}:443/")
+    logging.info(f"Serving HTTPS on https://{SERVER_IP}:443/")
     httpd.serve_forever()
