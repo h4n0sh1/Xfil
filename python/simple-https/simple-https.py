@@ -7,7 +7,7 @@ import ssl
 from pathlib import Path
 import subprocess
 import sys
-import cgi
+import re
 import time
 
 class CustomHandler(SimpleHTTPRequestHandler):
@@ -15,33 +15,48 @@ class CustomHandler(SimpleHTTPRequestHandler):
         logging.info("%s - - [%s] %s", self.client_address[0], self.log_date_time_string(), format % args)
 
     def do_POST(self):
-
         data_dir = Path(__file__).resolve().parent / "data"
         data_dir.mkdir(exist_ok=True)
 
-        ctype, pdict = cgi.parse_header(self.headers.get('Content-Type', ''))
-        if ctype == 'multipart/form-data':
-            pdict['boundary'] = pdict['boundary'].encode('utf-8')
-            pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={
-                    'REQUEST_METHOD': 'POST',
-                    'CONTENT_TYPE': self.headers.get('Content-Type', '')
-                },
-                keep_blank_values=True
-            )
-            fileitem = form['file'] if 'file' in form else None
-            if fileitem and fileitem.filename:
-                filename = fileitem.filename
-                file_data = fileitem.file.read()
-            else:
+        content_type = self.headers.get('Content-Type', '')
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_type.startswith('multipart/form-data'):
+            # Extract boundary from content_type
+            match = re.search(r'boundary=(.*)', content_type)
+            if not match:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b"Missing boundary in multipart/form-data")
+                return
+            boundary = match.group(1)
+            if boundary.startswith('"') and boundary.endswith('"'):
+                boundary = boundary[1:-1]
+            boundary = boundary.encode()
+            post_data = self.rfile.read(content_length)
+            # Split parts
+            parts = post_data.split(b'--' + boundary)
+            filename = None
+            file_data = None
+            for part in parts:
+                if not part or part == b'--\r\n' or part == b'--':
+                    continue
+                headers, _, body = part.partition(b'\r\n\r\n')
+                if not headers or not body:
+                    continue
+                headers_str = headers.decode(errors='ignore')
+                disposition_match = re.search(r'Content-Disposition:.*name="[^"]*"; filename="([^"]+)"', headers_str)
+                if disposition_match:
+                    filename = disposition_match.group(1)
+                    # Remove trailing boundary markers and CRLF
+                    body = body.rstrip(b'\r\n')
+                    file_data = body
+                    break
+            if not filename:
                 filename = f"upload_{self.client_address[0].replace('.', '_')}_{int(time.time())}"
-                file_data = fileitem.file.read() if fileitem else b''
+            if file_data is None:
+                file_data = b''
         else:
             # Not multipart: treat as raw upload
-            content_length = int(self.headers.get('Content-Length', 0))
             file_data = self.rfile.read(content_length) if content_length > 0 else b''
             filename = f"upload_{self.client_address[0].replace('.', '_')}_{int(time.time())}"
 
