@@ -1,2 +1,3 @@
 # Ignore certificate and key files
 *.pem
+data/
