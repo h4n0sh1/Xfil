@@ -107,6 +107,8 @@ if not CERT_FILE.exists() or not KEY_FILE.exists():
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(certfile=str(CERT_FILE), keyfile=str(KEY_FILE))
 context.check_hostname = False
+# Skip certificate verification
+context.verify_mode = ssl.CERT_NONE
 
 # Dynamically detect the main ethernet interface IP
 import socket
