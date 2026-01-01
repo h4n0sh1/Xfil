@@ -123,7 +123,7 @@ def get_main_ip():
 
 SERVER_IP = get_main_ip()
 
-with HTTPServer((SERVER_IP, 4443), SimpleHTTPRequestHandler) as httpd:
+with HTTPServer((SERVER_IP, 443), SimpleHTTPRequestHandler) as httpd:
     httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-    print(f"Serving HTTPS on https://{SERVER_IP}:4443/")
+    print(f"Serving HTTPS on https://{SERVER_IP}:443/")
     httpd.serve_forever()
