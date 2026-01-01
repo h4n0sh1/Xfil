@@ -1,4 +1,4 @@
-## All credits to Martin Pitt original source from 01/01/2026 : https://piware.de/2011/01/creating-an-https-server-in-python/
+## Credits to Martin Pitt for original source from 01/01/2026 : https://piware.de/2011/01/creating-an-https-server-in-python/
 ## Modified with copilot to use temporary certificate files for demonstration purposes
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
