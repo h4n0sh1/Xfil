@@ -108,7 +108,22 @@ context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(certfile=str(CERT_FILE), keyfile=str(KEY_FILE))
 context.check_hostname = False
 
-with HTTPServer(("localhost", 4443), SimpleHTTPRequestHandler) as httpd:
+# Dynamically detect the main ethernet interface IP
+import socket
+def get_main_ip():
+    try:
+        # This does not actually connect, just figures out the outbound interface
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+SERVER_IP = get_main_ip()
+
+with HTTPServer((SERVER_IP, 4443), SimpleHTTPRequestHandler) as httpd:
     httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-    print("Serving HTTPS on https://localhost:4443/")
+    print(f"Serving HTTPS on https://{SERVER_IP}:4443/")
     httpd.serve_forever()
