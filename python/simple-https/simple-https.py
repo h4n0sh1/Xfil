@@ -24,7 +24,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
         # Try to extract filename from headers (Content-Disposition)
         filename = None
-        if "multipart/form-data" in self.headers.get("Content-Type", ""):
+        if "application/octet-stream" in self.headers.get("Content-Type", ""):
             import re
             disposition = self.headers.get("Content-Disposition", "")
             match = re.search(r'filename="([^"]+)"', disposition)
