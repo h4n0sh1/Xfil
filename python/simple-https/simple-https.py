@@ -16,11 +16,40 @@ class CustomHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length) if content_length > 0 else b''
-        logging.info("POST request from %s: Path: %s, Data: %s", self.client_address[0], self.path, post_data.decode(errors='replace'))
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b"POST received")
+        logging.info("POST request from %s: Path: %s, Content-Length: %d", self.client_address[0], self.path, content_length)
+
+        # Handle file upload: expects multipart/form-data or raw file
+        data_dir = Path(__file__).resolve().parent / "data"
+        data_dir.mkdir(exist_ok=True)
+
+        # Try to extract filename from headers (Content-Disposition)
+        filename = None
+        if "multipart/form-data" in self.headers.get("Content-Type", ""):
+            import re
+            disposition = self.headers.get("Content-Disposition", "")
+            match = re.search(r'filename="([^"]+)"', disposition)
+            if match:
+                filename = match.group(1)
+        if not filename:
+            # Fallback: use timestamp and client IP
+            import time
+            filename = f"upload_{self.client_address[0].replace('.', '_')}_{int(time.time())}"
+
+        file_path = data_dir / filename
+        try:
+            with open(file_path, "wb") as f:
+                f.write(post_data)
+            logging.info(f"Saved uploaded file to {file_path}")
+            self.send_response(201)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(f"File saved as {file_path.name}".encode())
+        except Exception as e:
+            logging.error(f"Failed to save file: {e}")
+            self.send_response(500)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b"File upload failed")
 
 
 def generate_self_signed_cert(cert_path: Path, key_path: Path) -> None:
