@@ -7,38 +7,48 @@ import ssl
 from pathlib import Path
 import subprocess
 import sys
-
+import cgi
+import time
 
 class CustomHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         logging.info("%s - - [%s] %s", self.client_address[0], self.log_date_time_string(), format % args)
 
     def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length) if content_length > 0 else b''
-        logging.info("POST request from %s: Path: %s, Content-Length: %d", self.client_address[0], self.path, content_length)
 
-        # Handle file upload: expects multipart/form-data or raw file
         data_dir = Path(__file__).resolve().parent / "data"
         data_dir.mkdir(exist_ok=True)
 
-        # Try to extract filename from headers (Content-Disposition)
-        filename = None
-        if "multipart/form-data" in self.headers.get("Content-Type", ""):
-            import re
-            disposition = self.headers.get("Content-Disposition", "")
-            match = re.search(r'filename="([^"]+)"', disposition)
-            if match:
-                filename = match.group(1)
-        if not filename:
-            # Fallback: use timestamp and client IP
-            import time
+        ctype, pdict = cgi.parse_header(self.headers.get('Content-Type', ''))
+        if ctype == 'multipart/form-data':
+            pdict['boundary'] = pdict['boundary'].encode('utf-8')
+            pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={
+                    'REQUEST_METHOD': 'POST',
+                    'CONTENT_TYPE': self.headers.get('Content-Type', '')
+                },
+                keep_blank_values=True
+            )
+            fileitem = form['file'] if 'file' in form else None
+            if fileitem and fileitem.filename:
+                filename = fileitem.filename
+                file_data = fileitem.file.read()
+            else:
+                filename = f"upload_{self.client_address[0].replace('.', '_')}_{int(time.time())}"
+                file_data = fileitem.file.read() if fileitem else b''
+        else:
+            # Not multipart: treat as raw upload
+            content_length = int(self.headers.get('Content-Length', 0))
+            file_data = self.rfile.read(content_length) if content_length > 0 else b''
             filename = f"upload_{self.client_address[0].replace('.', '_')}_{int(time.time())}"
 
         file_path = data_dir / filename
         try:
             with open(file_path, "wb") as f:
-                f.write(post_data)
+                f.write(file_data)
             logging.info(f"Saved uploaded file to {file_path}")
             self.send_response(201)
             self.send_header('Content-type', 'text/plain')
