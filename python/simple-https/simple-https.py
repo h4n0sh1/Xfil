@@ -35,8 +35,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             # Split parts
             parts = post_data.split(b'--' + boundary)
-            filename = None
-            file_data = None
+            files_saved = []
             for part in parts:
                 if not part or part == b'--\r\n' or part == b'--':
                     continue
@@ -50,31 +49,49 @@ class CustomHandler(SimpleHTTPRequestHandler):
                     # Remove trailing boundary markers and CRLF
                     body = body.rstrip(b'\r\n')
                     file_data = body
-                    break
-            if not filename:
-                filename = f"upload_{self.client_address[0].replace('.', '_')}_{int(time.time())}"
-            if file_data is None:
-                file_data = b''
+                    
+                    # Save the file immediately
+                    file_path = data_dir / filename
+                    try:
+                        with open(file_path, "wb") as f:
+                            f.write(file_data)
+                        logging.info(f"Saved uploaded file to {file_path}")
+                        files_saved.append(file_path.name)
+                    except Exception as e:
+                        logging.error(f"Failed to save file {filename}: {e}")
+            
+            if not files_saved:
+                self.send_response(400)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b"No files uploaded")
+                return
+            # Send success response
+            self.send_response(201)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            response_msg = f"Successfully saved {len(files_saved)} file(s): {', '.join(files_saved)}"
+            self.wfile.write(response_msg.encode())
         else:
             # Not multipart: treat as raw upload
             file_data = self.rfile.read(content_length) if content_length > 0 else b''
             filename = f"upload_{self.client_address[0].replace('.', '_')}_{int(time.time())}"
 
-        file_path = data_dir / filename
-        try:
-            with open(file_path, "wb") as f:
-                f.write(file_data)
-            logging.info(f"Saved uploaded file to {file_path}")
-            self.send_response(201)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(f"File saved as {file_path.name}".encode())
-        except Exception as e:
-            logging.error(f"Failed to save file: {e}")
-            self.send_response(500)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b"File upload failed")
+            file_path = data_dir / filename
+            try:
+                with open(file_path, "wb") as f:
+                    f.write(file_data)
+                logging.info(f"Saved uploaded file to {file_path}")
+                self.send_response(201)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f"File saved as {file_path.name}".encode())
+            except Exception as e:
+                logging.error(f"Failed to save file: {e}")
+                self.send_response(500)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b"File upload failed")
 
 
 def generate_self_signed_cert(cert_path: Path, key_path: Path) -> None:
